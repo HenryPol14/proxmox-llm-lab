@@ -2,6 +2,10 @@
 set -e
 set -euxo pipefail
 
+# Description: Clone the cloud-init template and configure a monitoring VM.
+# Usage: sudo scripts/05-create-monitoring-vm.sh
+# Note: Review `VMID`, `NAME`, `STORAGE` and `TEMPLATE` variables.
+
 VMID=120
 NAME=monitoring-vm
 STORAGE=local-lvm

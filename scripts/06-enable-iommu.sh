@@ -2,6 +2,10 @@
 set -e
 set -euxo pipefail
 
+# Description: Enable IOMMU and add vfio modules for PCI passthrough.
+# Usage: sudo scripts/06-enable-iommu.sh
+# Note: Requires reboot after running.
+
 CPU_VENDOR=$(lscpu | grep Vendor)
 
 if echo "$CPU_VENDOR" | grep -qi intel; then

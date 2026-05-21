@@ -2,6 +2,10 @@
 set -e
 set -euxo pipefail
 
+# Description: Create a Proxmox VM and convert it to a cloud-init template.
+# Usage: sudo scripts/03-create-cloudinit-template.sh
+# Note: Adjust VMID, STORAGE and IMG variables as needed.
+
 VMID=9000
 STORAGE=local-lvm
 IMG=/var/lib/vz/template/qcow2/ubuntu-26.04.img

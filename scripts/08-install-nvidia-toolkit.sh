@@ -1,6 +1,10 @@
 #!/usr/bin/env bash
 set -euxo pipefail
 
+# Description: Install NVIDIA container toolkit and configure Docker runtime.
+# Usage: sudo scripts/08-install-nvidia-toolkit.sh
+# Note: Requires NVIDIA drivers and GPU hardware present.
+
 curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | \
 gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
 

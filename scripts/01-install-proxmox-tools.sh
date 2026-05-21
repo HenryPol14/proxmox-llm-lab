@@ -2,6 +2,10 @@
 set -e
 set -euxo pipefail
 
+# Description: Install common utilities on a Proxmox host.
+# Usage: sudo scripts/01-install-proxmox-tools.sh
+# Note: Run on the Proxmox node where you want these packages installed.
+
 apt update
 apt install -y \
   curl \
