@@ -17,7 +17,12 @@ apt install -y \
   unzip \
   gnupg \
   lsb-release \
-  software-properties-common \
-  qemu-guest-agent
+  qemu-guest-agent \
+  net-tools \
+  dnsutils \
+  pciutils \
+  usbutils \
+  zip \
+  tar
 
 echo "DONE"
