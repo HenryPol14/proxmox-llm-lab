@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Description: Create a Proxmox VM and convert it to a cloud-init template.
-# Usage: sudo scripts/03-create-cloudinit-template.sh
+# Usage: sudo scripts/04-create-cloudinit-template.sh
 # Note: Adjust VMID, STORAGE and IMG variables as needed.
 
 VMID=9000

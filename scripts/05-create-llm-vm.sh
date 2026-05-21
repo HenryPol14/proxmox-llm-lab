@@ -2,7 +2,7 @@
 set -euo pipefail
 
 # Description: Clone the cloud-init template and configure an LLM VM.
-# Usage: sudo scripts/04-create-llm-vm.sh
+# Usage: sudo scripts/05-create-llm-vm.sh
 # Note: Review `VMID`, `NAME`, `STORAGE` and `TEMPLATE` variables.
 
 VMID=110

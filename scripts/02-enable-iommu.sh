@@ -3,7 +3,7 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # Description: Enable IOMMU and add vfio modules for PCI passthrough.
-# Usage: sudo scripts/06-enable-iommu.sh
+# Usage: sudo scripts/02-enable-iommu.sh
 # Note: Requires reboot after running.
 
 for g in /sys/kernel/iommu_groups/*; do
