@@ -41,8 +41,8 @@ qm set "$VMID" --agent enabled=1
 qm set "$VMID" \
   --hostpci0 01:00.0,pcie=1,rombar=0
 qm set "$VMID" --hostpci1 01:00.1
-qm set "$VMID" --vga none
-
+qm set "$VMID" --vga std
+qm set "$VMID" -serial0 socket
 qm start "$VMID"
 
 echo "LLM VM CREATED"
