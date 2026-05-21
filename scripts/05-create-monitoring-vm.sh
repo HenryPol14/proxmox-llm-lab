@@ -8,7 +8,7 @@ set -euxo pipefail
 
 VMID=120
 NAME=monitoring-vm
-STORAGE=local-lvm
+STORAGE=SSD-VMs
 TEMPLATE=9000
 
 qm clone $TEMPLATE $VMID --name $NAME --full true

@@ -7,7 +7,7 @@ set -euxo pipefail
 # Note: Adjust VMID, STORAGE and IMG variables as needed.
 
 VMID=9000
-STORAGE=local-lvm
+STORAGE=SSD-VMs
 IMG=/var/lib/vz/template/qcow2/ubuntu-26.04.img
 
 qm destroy $VMID --purge 2>/dev/null || true
@@ -16,7 +16,10 @@ qm create $VMID \
   --name ubuntu-26-template \
   --memory 4096 \
   --cores 4 \
-  --net0 virtio,bridge=vmbr0
+  --net0 virtio,bridge=vmbr0 \
+  --machine q35 \
+  --bios ovmf \
+  --efidisk0 ${STORAGE}:1
 
 qm importdisk $VMID $IMG $STORAGE
 
