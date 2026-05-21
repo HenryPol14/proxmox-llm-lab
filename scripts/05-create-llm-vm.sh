@@ -14,7 +14,7 @@ qm destroy "$VMID" --purge || true
 qm clone "$TEMPLATE" "$VMID" --name "$NAME" --full true
 
 qm set "$VMID" \
-  --memory 24576 \
+  --memory 20480 \
   --cores 4 \
   --cpu host \
   --balloon 0 \
