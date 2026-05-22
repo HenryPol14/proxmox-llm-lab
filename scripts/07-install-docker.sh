@@ -1,15 +1,24 @@
 #!/usr/bin/env bash
-set -e
-set -euxo pipefail
+set -euo pipefail
+IFS=$'\n\t'
 
-# Description: Install Docker using the official convenience script.
-# Usage: sudo scripts/07-install-docker.sh
-# Note: This script adds the current user to the `docker` group.
+# Описание: Устанавливает Docker на хост и настраивает службу.
+# Использование: sudo scripts/07-install-docker.sh
+# Примечание: По завершении текущий пользователь добавляется в группу docker.
+
+# Загружаем и выполняем официальный установщик Docker.
 curl -fsSL https://get.docker.com | sh
 
+# Включаем и запускаем сервис Docker.
 systemctl enable docker
 systemctl start docker
 
-usermod -aG docker "$USER"
+# Добавляем пользователя в группу docker для использования без sudo.
+if [[ -n "${SUDO_USER:-}" ]]; then
+    usermod -aG docker "${SUDO_USER}"
+else
+    usermod -aG docker "$USER"
+fi
 
+# Проверяем установленную версию Docker.
 docker version

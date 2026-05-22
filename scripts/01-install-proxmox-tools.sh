@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-set -e
-set -euxo pipefail
+set -euo pipefail
+IFS=$'\n\t'
 
-# Description: Install common utilities on a Proxmox host.
-# Usage: sudo scripts/01-install-proxmox-tools.sh
-# Note: Run on the Proxmox node where you want these packages installed.
+# Описание: Устанавливает базовый набор утилит на узел Proxmox.
+# Использование: sudo scripts/01-install-proxmox-tools.sh
+# Примечание: Запускается на узле Proxmox, где требуется набор инструментов для работы с сетью, дисками и GPU.
 
+# Обновляем кэш пакетов и устанавливаем стандартные утилиты.
 apt update
 apt install -y \
   curl \

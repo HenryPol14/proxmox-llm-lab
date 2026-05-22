@@ -1,14 +1,16 @@
 #!/usr/bin/env bash
-set -e
-set -euxo pipefail
+set -euo pipefail
+IFS=$'\n\t'
 
-# Description: Deploy the Ollama LLM stack using Docker Compose.
-# Usage: sudo scripts/09-deploy-ollama.sh
-# Note: Expects a `docker-compose.yml` in the same directory or adjusts path.
+# Описание: Разворачивает стек Ollama с помощью Docker Compose.
+# Использование: sudo scripts/09-deploy-ollama.sh
+# Примечание: Ожидает наличие docker-compose.yml рядом со скриптом или в указанных путях.
 
+# Создаём директорию для стеков и копируем файлы конфигурации.
 mkdir -p /opt/llm-stack
 cp docker-compose.yml /opt/llm-stack/
 
+# Переходим в директорию и запускаем сервисы.
 cd /opt/llm-stack
 
 docker compose up -d
