@@ -46,6 +46,7 @@ qm set "$VMID" \
 # Включаем cloud-init и передаем SSH ключ для доступа к VM.
 qm set "$VMID" \
   --ciuser ubuntu \
+  --cipassword ubuntu \
   --sshkey ~/.ssh/id_rsa.pub \
   --ipconfig0 ip=dhcp
 
