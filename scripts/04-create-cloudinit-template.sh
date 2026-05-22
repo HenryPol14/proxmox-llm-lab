@@ -22,8 +22,17 @@ virt-customize -a "$IMG" \
   --run-command "truncate -s 0 /etc/machine-id" \
   --truncate /etc/machine-id
 
-echo "--- Пересоздание шаблона $VMID ---"
-qm destroy "$VMID" --purge 2>/dev/null || true
+echo "--- Подготовка шаблона $VMID ---"
+if qm config "$VMID" >/dev/null 2>&1; then
+  if [[ "${FORCE_REBUILD:-0}" == "1" ]]; then
+    echo "FORCE_REBUILD=1: удаляю старый шаблон $VMID и создаю заново."
+    qm destroy "$VMID" --purge
+  else
+    echo "Шаблон $VMID уже существует. Пропускаю пересоздание, чтобы не портить текущую конфигурацию."
+    echo "Если нужно пересоздать шаблон, запустите скрипт с FORCE_REBUILD=1."
+    exit 0
+  fi
+fi
 
 qm create "$VMID" \
   --name "ubuntu-26-template" \

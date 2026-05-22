@@ -25,9 +25,12 @@ if ! qm config "$TEMPLATE" >/dev/null 2>&1; then
   exit 1
 fi
 
-echo "=== Создаем VM $VMID ==="
-qm destroy "$VMID" --purge 2>/dev/null || true
-qm clone "$TEMPLATE" "$VMID" --name "$NAME" --full true
+echo "=== Подготовка VM $VMID ==="
+if qm config "$VMID" >/dev/null 2>&1; then
+  echo "VM $VMID уже существует. Обновляю конфигурацию без пересоздания."
+else
+  qm clone "$TEMPLATE" "$VMID" --name "$NAME" --full true
+fi
 
 qm set "$VMID" \
   --ostype l26 \
@@ -58,7 +61,11 @@ qm set "$VMID" --scsi1 "${STORAGE}:${DATA_DISK_SIZE}",discard=on,ssd=1,iothread=
 qm set "$VMID" --onboot 1
 VM_MAC=$(qm config "$VMID" | grep -oE 'virtio=[0-9A-Fa-f:]{17}' | head -n1 | cut -d= -f2 || true)
 
-qm start "$VMID"
+if qm status "$VMID" 2>/dev/null | grep -q 'running'; then
+  echo "VM $VMID уже запущена."
+else
+  qm start "$VMID"
+fi
 
 echo "=== Ожидание QEMU Guest Agent ==="
 for i in {1..30}; do

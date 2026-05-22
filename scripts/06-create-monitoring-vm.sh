@@ -26,10 +26,13 @@ if ! qm config "$TEMPLATE" >/dev/null 2>&1; then
   exit 1
 fi
 
-# Удаляем старую VM с таким ID, если она уже есть, чтобы избежать конфликтов.
-echo "=== Создаем VM $VMID ==="
-qm destroy "$VMID" --purge 2>/dev/null || true
-qm clone "$TEMPLATE" "$VMID" --name "$NAME" --full true
+# Создаем VM только если она еще не существует; иначе обновляем конфигурацию.
+echo "=== Подготовка VM $VMID ==="
+if qm config "$VMID" >/dev/null 2>&1; then
+  echo "VM $VMID уже существует. Обновляю конфигурацию без пересоздания."
+else
+  qm clone "$TEMPLATE" "$VMID" --name "$NAME" --full true
+fi
 
 # Настраиваем железо и сеть мониторинговой VM.
 # Используем bridge vmbr1, чтобы все создаваемые VM были в одной сети.
@@ -46,7 +49,11 @@ qm set "$VMID" \
   --sshkey ~/.ssh/id_rsa.pub \
   --ipconfig0 ip=dhcp
 
-# Запускаем VM после завершения конфигурации.
-qm start "$VMID"
+# Запускаем VM после завершения конфигурации, если она еще не работает.
+if qm status "$VMID" 2>/dev/null | grep -q 'running'; then
+  echo "VM $VMID уже запущена."
+else
+  qm start "$VMID"
+fi
 
 echo "MONITORING VM CREATED"
