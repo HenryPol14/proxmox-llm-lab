@@ -7,4 +7,4 @@ set -e
 ./03-download-cloud-image.sh
 ./04-create-cloudinit-template.sh
 ./05-create-llm-vm.sh
-./06-create-gpu-vm.sh
+./06-create-monitoring-vm.sh
