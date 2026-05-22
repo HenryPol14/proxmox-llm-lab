@@ -42,21 +42,17 @@ qm create "$VMID" \
   --tablet 0 # Отключение планшета экономит ресурсы CPU
 
 # 4. Работа с дисками
-# Стало (для LVM-Thin):
+echo "Создание EFI диска..."
 qm set "$VMID" --efidisk0 "${STORAGE}:0"
 
-echo "Импорт диска (это может занять время)..."
-# Импортируем и сразу узнаем имя тома
-IMPORT_RESULT=$(qm importdisk "$VMID" "$IMG_PATH" "$STORAGE")
-# Извлекаем имя созданного тома из вывода (надежнее, чем awk по конфигу)
-DISK_VOL=$(echo "$IMPORT_RESULT" | grep -o "unused[0-9]" | head -1 || echo "")
-# Если grep не сработал, пробуем старый метод через config
-if [[ -z "$DISK_VOL" ]]; then
-    DISK_VOL=$(qm config "$VMID" | awk '/unused0/ {split($2, a, ","); print a[1]}')
-fi
+echo "Импорт образа..."
+qm importdisk "$VMID" "$IMG_PATH" "$STORAGE"
 
-qm set "$VMID" --scsihw virtio-scsi-single \
-  --scsi0 "${STORAGE}:${DISK_VOL/unused0:/}",discard=on,ssd=1,iothread=1
+# Извлекаем точное имя тома из конфига
+DISK_VOL=$(qm config "$VMID" | grep "unused0" | awk '{print $2}' | cut -d',' -f1)
+
+# Назначаем диск как основной
+qm set "$VMID" --scsihw virtio-scsi-single --scsi0 "$DISK_VOL",discard=on,ssd=1,iothread=1
 
 # 5. Cloud-Init и загрузка
 qm set "$VMID" --ide2 "${STORAGE}:cloudinit"
