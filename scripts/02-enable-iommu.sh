@@ -41,11 +41,15 @@ if [[ "$check_grub" != true ]]; then
   fi
   sed -i "s|^GRUB_CMDLINE_LINUX_DEFAULT=\".*\"$|GRUB_CMDLINE_LINUX_DEFAULT=\"$updated_args\"|" "$grub_file"
   echo "Updated GRUB_CMDLINE_LINUX_DEFAULT: $updated_args"
+else
+  echo "GRUB уже содержит необходимые параметры IOMMU. Пропускаю обновление GRUB."
 fi
 
 if [[ ${#missing_modules[@]} -gt 0 ]]; then
   printf '%s\n' "${missing_modules[@]}" >> "$modules_file"
   echo "Added missing vfio modules to $modules_file: ${missing_modules[*]}"
+else
+  echo "Модули vfio уже присутствуют. Пропускаю обновление /etc/modules."
 fi
 
 update-initramfs -u -k all
