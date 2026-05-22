@@ -1,24 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
-IFS=$'\n\t'
 
-# Описание: Устанавливает Docker на хост и настраивает службу.
-# Использование: sudo scripts/07-install-docker.sh
-# Примечание: По завершении текущий пользователь добавляется в группу docker.
+if [[ $EUID -ne 0 ]]; then
+  echo "Ошибка: запустите скрипт от root" >&2
+  exit 1
+fi
 
-# Загружаем и выполняем официальный установщик Docker.
+if ! command -v curl >/dev/null 2>&1; then
+  echo "ERROR: curl не найден." >&2
+  exit 1
+fi
+
 curl -fsSL https://get.docker.com | sh
-
-# Включаем и запускаем сервис Docker.
 systemctl enable docker
 systemctl start docker
 
-# Добавляем пользователя в группу docker для использования без sudo.
 if [[ -n "${SUDO_USER:-}" ]]; then
-    usermod -aG docker "${SUDO_USER}"
+  usermod -aG docker "$SUDO_USER"
 else
-    usermod -aG docker "$USER"
+  usermod -aG docker "$USER"
 fi
 
-# Проверяем установленную версию Docker.
 docker version

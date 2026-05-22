@@ -1,23 +1,30 @@
 #!/usr/bin/env bash
 set -euo pipefail
-IFS=$'\n\t'
-
-# Описание: Клонирует cloud-init шаблон и настраивает виртуальную VM для мониторинга.
-# Использование: sudo scripts/06-create-monitoring-vm.sh
-# Примечание: Проверьте VMID, NAME, STORAGE и TEMPLATE перед запуском.
 
 VMID=120
-NAME=monitoring-vm
-STORAGE=SSD-VMs
+NAME="monitoring-vm"
+STORAGE="SSD-VMs"
 TEMPLATE=9000
 
-# Удаляем старую VM с тем же VMID, если она существует.
-qm destroy "$VMID" --purge || true
+if [[ $EUID -ne 0 ]]; then
+  echo "Ошибка: запустите скрипт от root" >&2
+  exit 1
+fi
 
-# Клонируем шаблон cloud-init для мониторинговой машины.
+if ! command -v qm >/dev/null 2>&1; then
+  echo "ERROR: qm не найден. Запустите на Proxmox хосте." >&2
+  exit 1
+fi
+
+if ! qm config "$TEMPLATE" >/dev/null 2>&1; then
+  echo "ERROR: Шаблон VM $TEMPLATE не найден." >&2
+  exit 1
+fi
+
+echo "=== Создаем VM $VMID ==="
+qm destroy "$VMID" --purge 2>/dev/null || true
 qm clone "$TEMPLATE" "$VMID" --name "$NAME" --full true
 
-# Настраиваем ресурсы и дисковую подсистему.
 qm set "$VMID" \
   --memory 8192 \
   --cores 4 \
@@ -25,13 +32,11 @@ qm set "$VMID" \
   --scsi0 "${STORAGE}:32" \
   --net0 virtio,bridge=vmbr0
 
-# Конфигурация cloud-init: пользователь и DHCP.
 qm set "$VMID" \
   --ciuser ubuntu \
   --sshkey ~/.ssh/id_rsa.pub \
   --ipconfig0 ip=dhcp
 
-# Запускаем мониторинговую виртуальную машину.
 qm start "$VMID"
 
 echo "MONITORING VM CREATED"

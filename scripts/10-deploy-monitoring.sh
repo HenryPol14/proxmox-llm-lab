@@ -1,12 +1,15 @@
 #!/usr/bin/env bash
 set -euo pipefail
-IFS=$'\n\t'
 
-# Описание: Разворачивает стек мониторинга с помощью Docker Compose.
-# Использование: sudo scripts/10-deploy-monitoring.sh
-# Примечание: Используется docker-compose файл из папки docker/monitoring.
+if [[ $EUID -ne 0 ]]; then
+  echo "Ошибка: запустите скрипт от root" >&2
+  exit 1
+fi
 
-# Запускаем стек мониторинга в фоновом режиме.
+if ! command -v docker >/dev/null 2>&1; then
+  echo "ERROR: docker не найден." >&2
+  exit 1
+fi
+
 docker compose -f docker/monitoring/docker-compose.yml up -d
-
 echo "MONITORING STACK DEPLOYED"

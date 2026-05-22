@@ -1,75 +1,54 @@
 #!/usr/bin/env bash
 set -euo pipefail
-IFS=$'\n\t'
 
-# Описание: Создает Proxmox VM на основе Ubuntu cloud-образа и превращает её в шаблон cloud-init.
-# Примечание: Требует установленного пакета libguestfs-tools для virt-customize.
-# В шаблон добавляется QEMU Guest Agent, но сетевые параметры cloud-init задаются при создании клона.
-
+# Конфигурация
 VMID=9000
 STORAGE=SSD-VMs
 IMG="/var/lib/vz/template/qcow2/ubuntu-26.04.img"
 
-# 1. Проверяем, что образ существует.
 if [[ ! -f "$IMG" ]]; then
   echo "ERROR: Образ не найден: $IMG" >&2
-  echo "Запустите scripts/03-download-cloud-image.sh" >&2
   exit 1
 fi
 
-# 2. Проверяем наличие virt-customize.
-if ! command -v virt-customize >/dev/null 2>&1; then
-  echo "ERROR: virt-customize не найден. Установите libguestfs-tools." >&2
-  exit 1
-fi
-
-# 3. Готовим образ: устанавливаем qemu-guest-agent, настраиваем консоль и очищаем machine-id.
-echo "=== Подготовка cloud-образа ==="
+echo "--- Модификация образа (Console & Agent) ---"
+# 1. Включаем вывод в Serial консоль (ttyS0)
+# 2. Устанавливаем Guest Agent
+# 3. Сбрасываем Machine-ID для уникальных IP по DHCP
 virt-customize -a "$IMG" \
   --install qemu-guest-agent,curl \
-  --run-command "sed -i 's/^#DNSStubListener=yes/DNSStubListener=no/' /etc/systemd/resolved.conf || true" \
   --run-command "sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=\"\(.*\)\"/GRUB_CMDLINE_LINUX_DEFAULT=\"\1 console=tty0 console=ttyS0,115200n8\"/' /etc/default/grub" \
   --run-command "update-grub" \
-  --run-command "rm -f /etc/netplan/*.yaml" \
+  --run-command "truncate -s 0 /etc/machine-id" \
   --truncate /etc/machine-id
 
-# 4. Удаляем VM с таким же VMID, если она уже существует.
-echo "=== Создаем шаблонную VM ==="
+echo "--- Пересоздание шаблона $VMID ---"
 qm destroy "$VMID" --purge 2>/dev/null || true
 
 qm create "$VMID" \
-  --name ubuntu-26-template \
+  --name "ubuntu-26-template" \
   --ostype l26 \
-  --memory 4096 \
+  --memory 2048 \
   --cores 2 \
   --cpu host \
   --machine q35 \
   --bios ovmf \
   --agent enabled=1 \
-  --net0 virtio,bridge=vmbr0
+  --net0 virtio,bridge=vmbr1 # Сразу ставим на внутренний мост
 
-# 5. Настраиваем EFI-диск и импортируем qcow2 образ в хранилище.
-echo "=== Импорт диска ==="
+# Импорт диска
 qm set "$VMID" --efidisk0 "${STORAGE}:0"
 qm importdisk "$VMID" "$IMG" "$STORAGE"
 
-# 6. Определяем имя импортированного диска и подключаем его как scsi0.
+# Получаем имя диска для LVM-Thin
 DISK_VOL=$(qm config "$VMID" | awk '/unused0:/ {print $2}' | cut -d, -f1)
-if [[ -z "$DISK_VOL" ]]; then
-  echo "ERROR: Не удалось определить импортированный диск." >&2
-  exit 1
-fi
+qm set "$VMID" --scsihw virtio-scsi-single --scsi0 "$DISK_VOL",discard=on,ssd=1
 
-qm set "$VMID" \
-  --scsihw virtio-scsi-single \
-  --scsi0 "$DISK_VOL",discard=on,ssd=1,iothread=1
-
-# 7. Добавляем cloud-init диск и конфигурацию загрузки.
+# Настройки Cloud-Init
 qm set "$VMID" --ide2 "${STORAGE}:cloudinit"
 qm set "$VMID" --boot order=scsi0
 qm set "$VMID" --serial0 socket --vga serial0
 
-# 8. Преобразуем VM в шаблон.
-echo "=== Преобразуем VM в шаблон ==="
+echo "Converting to template..."
 qm template "$VMID"
-echo "DONE: Template $VMID создан."
+echo "УСПЕХ: Шаблон готов. Теперь запускайте скрипт 05."
