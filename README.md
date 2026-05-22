@@ -46,3 +46,20 @@ GitHub
 Proxmox scripts
    ↓
 Terraform/Ansible later
+
+## Network Validation
+
+Run:
+
+```bash
+./scripts/11-audit-network.sh
+```
+
+Checks:
+- bridges
+- routing
+- NAT
+- nftables
+- dnsmasq
+- forwarding
+- VM networking
