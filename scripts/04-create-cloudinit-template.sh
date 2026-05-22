@@ -42,11 +42,12 @@ qm create "$VMID" \
   --tablet 0 # Отключение планшета экономит ресурсы CPU
 
 # 4. Работа с дисками
-qm set "$VMID" --efidisk0 "${STORAGE}:1",format=qcow2
+# Стало (для LVM-Thin):
+qm set "$VMID" --efidisk0 "${STORAGE}:0"
 
 echo "Импорт диска (это может занять время)..."
 # Импортируем и сразу узнаем имя тома
-IMPORT_RESULT=$(qm importdisk "$VMID" "$IMG_PATH" "$STORAGE" --format qcow2)
+IMPORT_RESULT=$(qm importdisk "$VMID" "$IMG_PATH" "$STORAGE")
 # Извлекаем имя созданного тома из вывода (надежнее, чем awk по конфигу)
 DISK_VOL=$(echo "$IMPORT_RESULT" | grep -o "unused[0-9]" | head -1 || echo "")
 # Если grep не сработал, пробуем старый метод через config
