@@ -1,11 +1,29 @@
 #!/usr/bin/env bash
-# shellcheck shell=bash
 set -Eeuo pipefail
 
-# Описание: Скрипт аудита сетевой конфигурации Proxmox.
-# Проверяет состояние физических интерфейсов, мостов, маршрутизации,
-# DNS, IP forwarding, бэкенд iptables/nftables, NAT, dnsmasq, firewall и VM.
-# Использование: sudo bash scripts/11-audit-network.sh
+# ============================================================
+# PROXMOX NETWORK AUDIT (READ ONLY)
+# ============================================================
+#
+# Безопасный аудит сетевой подсистемы Proxmox VE 9+
+#
+# СОВМЕСТИМО:
+#   - Proxmox VE 9
+#   - nftables firewall
+#   - pve-firewall
+#   - kernel 7.x pve
+#
+# БЕЗОПАСНО ДЛЯ SSH:
+#   Скрипт НЕ изменяет:
+#     - nftables
+#     - iptables
+#     - routing
+#     - bridges
+#     - networking
+#
+# Скрипт только ЧИТАЕТ состояние системы.
+#
+# ============================================================
 
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -18,301 +36,458 @@ WARN="${YELLOW}[WARN]${NC}"
 FAIL="${RED}[FAIL]${NC}"
 INFO="${BLUE}[INFO]${NC}"
 
-print_header() {
-    echo
-    echo "======================================================"
-    echo " PROXMOX NETWORK AUDIT"
-    echo "======================================================"
-    echo
-}
-
-print_section() {
-    local title="$1"
-    echo "------------------------------------------------------"
-    echo "$title"
-    echo "------------------------------------------------------"
-}
-
-print_header
+echo
+echo "======================================================"
+echo " PROXMOX VE NETWORK AUDIT (READ ONLY)"
+echo " SAFE FOR REMOTE SSH EXECUTION"
+echo " NFTABLES / PVE-FIREWALL AWARE"
+echo "======================================================"
+echo
 
 # ------------------------------------------------------------
-# Определяем внешний мост по default-роуту
+# SYSTEM INFO
 # ------------------------------------------------------------
-WAN_BRIDGE=$(ip route | awk '/default/ {print $5; exit}')
+
+echo "------------------------------------------------------"
+echo " SYSTEM INFO"
+echo "------------------------------------------------------"
+
+echo
+hostnamectl || true
+
+echo
+echo "Kernel:"
+uname -a
+
+echo
+echo "Proxmox version:"
+pveversion || true
+
+echo
+
+# ------------------------------------------------------------
+# DETECT WAN BRIDGE
+# ------------------------------------------------------------
+
+WAN_BRIDGE=$(ip route | awk '/default/ {print $5}' | head -n1)
 
 if [[ -z "${WAN_BRIDGE}" ]]; then
     echo -e "${FAIL} Не удалось определить WAN bridge"
     exit 1
 fi
 
-echo -e "${INFO} WAN bridge detected: ${WAN_BRIDGE}"
+echo -e "${INFO} WAN bridge: ${WAN_BRIDGE}"
 
 # ------------------------------------------------------------
-# Определяем внутренний мост по адресу 10.x.x.x
+# DETECT INTERNAL BRIDGE
 # ------------------------------------------------------------
-INTERNAL_BRIDGE=$(ip -o -4 addr show | awk '$4 ~ /^10\./ {print $2; exit}')
+
+INTERNAL_BRIDGE=$(ip -o -4 addr show | awk '$4 ~ /^10\./ {print $2}' | head -n1)
 
 if [[ -z "${INTERNAL_BRIDGE}" ]]; then
     INTERNAL_BRIDGE="vmbr1"
 fi
 
-echo -e "${INFO} Internal bridge detected: ${INTERNAL_BRIDGE}"
+echo -e "${INFO} Internal bridge: ${INTERNAL_BRIDGE}"
 
 echo
 
 # ------------------------------------------------------------
-# 1. Проверка физических NIC
+# SSH SAFETY CHECK
 # ------------------------------------------------------------
-print_section "1. PHYSICAL NIC"
-ip link show
+
+echo "------------------------------------------------------"
+echo " SSH SAFETY CHECK"
+echo "------------------------------------------------------"
 
 echo
-if ip link show | grep -q LOWER_UP; then
-    echo -e "${OK} Physical NIC link is UP"
+echo "Активные SSH сессии:"
+echo
+
+who || true
+
+echo
+
+SSH_PORT=$(ss -tlnp 2>/dev/null | awk '/sshd/ {print $4}' | sed 's/.*://' | head -n1)
+SSH_PORT=${SSH_PORT:-22}
+
+echo -e "${INFO} SSH порт: ${SSH_PORT}"
+
+echo
+
+# Проверяем SSH rules через nftables
+if nft list ruleset 2>/dev/null | grep -q "dport ${SSH_PORT}"; then
+    echo -e "${OK} SSH правило найдено в nftables"
 else
-    echo -e "${FAIL} Physical NIC link DOWN"
+    echo -e "${WARN} SSH правило явно не найдено"
 fi
 
 echo
-printf 'NIC statistics:\n'
+
+# ------------------------------------------------------------
+# FIREWALL SERVICES
+# ------------------------------------------------------------
+
+echo "------------------------------------------------------"
+echo " FIREWALL SERVICES"
+echo "------------------------------------------------------"
+
+systemctl --no-pager --type=service | grep firewal || true
+
+echo
+
+# Проверяем proxmox-firewall
+if systemctl is-active proxmox-firewall >/dev/null 2>&1; then
+    echo -e "${OK} proxmox-firewall active"
+else
+    echo -e "${WARN} proxmox-firewall inactive"
+fi
+
+# Проверяем pve-firewall
+if systemctl is-active pve-firewall >/dev/null 2>&1; then
+    echo -e "${OK} pve-firewall active"
+else
+    echo -e "${WARN} pve-firewall inactive"
+fi
+
+echo
+
+# ------------------------------------------------------------
+# PHYSICAL NIC CHECK
+# ------------------------------------------------------------
+
+echo "------------------------------------------------------"
+echo " PHYSICAL INTERFACES"
+echo "------------------------------------------------------"
+
+ip link show
+
+echo
+
+if ip link show | grep -q LOWER_UP; then
+    echo -e "${OK} Есть интерфейсы в состоянии LOWER_UP"
+else
+    echo -e "${FAIL} LOWER_UP интерфейсы отсутствуют"
+fi
+
+echo
+
+echo "Статистика интерфейсов:"
+echo
+
 ip -s link
 
 echo
 
 # ------------------------------------------------------------
-# 2. Проверка мостов
+# BRIDGES
 # ------------------------------------------------------------
-print_section "2. BRIDGES"
+
+echo "------------------------------------------------------"
+echo " BRIDGES"
+echo "------------------------------------------------------"
 
 if command -v brctl >/dev/null 2>&1; then
     brctl show
-elif command -v bridge >/dev/null 2>&1; then
-    bridge link
 else
-    echo -e "${WARN} Не найден brctl или bridge"
+    bridge link
 fi
 
 echo
-if command -v bridge >/dev/null 2>&1; then
-    bridge link
-else
-    echo -e "${WARN} Команда bridge отсутствует"
-fi
+
+bridge link
 
 echo
-if command -v bridge >/dev/null 2>&1 && bridge link | grep -q "master ${WAN_BRIDGE}"; then
-    echo -e "${OK} Physical NIC attached to ${WAN_BRIDGE}"
+
+if bridge link | grep -q "master ${WAN_BRIDGE}"; then
+    echo -e "${OK} Bridge membership корректен"
 else
-    echo -e "${WARN} Не удалось подтвердить участие NIC в мосту"
+    echo -e "${WARN} Не удалось подтвердить bridge membership"
 fi
 
 echo
 
 # ------------------------------------------------------------
-# 3. Проверка IP-адресов
+# IP ADDRESSES
 # ------------------------------------------------------------
-print_section "3. IP ADDRESSES"
+
+echo "------------------------------------------------------"
+echo " IP ADDRESSES"
+echo "------------------------------------------------------"
+
 ip a
 
 echo
 
 # ------------------------------------------------------------
-# 4. Проверка маршрутизации
+# ROUTING
 # ------------------------------------------------------------
-print_section "4. ROUTING"
+
+echo "------------------------------------------------------"
+echo " ROUTING"
+echo "------------------------------------------------------"
+
 ip r
 
 echo
-if ip route | grep -q '^default'; then
-    echo -e "${OK} Default route exists"
+
+if ip route | grep -q "^default"; then
+    echo -e "${OK} Default route присутствует"
 else
-    echo -e "${FAIL} Default route missing"
+    echo -e "${FAIL} Default route отсутствует"
 fi
 
 echo
 
 # ------------------------------------------------------------
-# 5. Проверка доступа в интернет
+# CONNECTIVITY
 # ------------------------------------------------------------
-print_section "5. INTERNET CONNECTIVITY"
+
+echo "------------------------------------------------------"
+echo " INTERNET CONNECTIVITY"
+echo "------------------------------------------------------"
 
 if ping -c 2 1.1.1.1 >/dev/null 2>&1; then
-    echo -e "${OK} ICMP internet connectivity OK"
+    echo -e "${OK} Интернет по IP доступен"
 else
-    echo -e "${FAIL} Cannot reach internet IP"
+    echo -e "${FAIL} Интернет по IP НЕ доступен"
 fi
 
 if ping -c 2 google.com >/dev/null 2>&1; then
-    echo -e "${OK} DNS resolution OK"
+    echo -e "${OK} DNS resolution работает"
 else
-    echo -e "${FAIL} DNS resolution failed"
+    echo -e "${FAIL} DNS resolution НЕ работает"
 fi
 
 echo
-printf '/etc/resolv.conf:\n'
+
+echo "/etc/resolv.conf:"
+echo
+
 cat /etc/resolv.conf
 
 echo
 
 # ------------------------------------------------------------
-# 6. Проверка IP forwarding
+# IP FORWARDING
 # ------------------------------------------------------------
-print_section "6. IP FORWARDING"
+
+echo "------------------------------------------------------"
+echo " IP FORWARDING"
+echo "------------------------------------------------------"
 
 sysctl net.ipv4.ip_forward
 
 echo
+
 if [[ "$(sysctl -n net.ipv4.ip_forward)" == "1" ]]; then
-    echo -e "${OK} IPv4 forwarding enabled"
+    echo -e "${OK} IPv4 forwarding включен"
 else
-    echo -e "${FAIL} IPv4 forwarding disabled"
+    echo -e "${FAIL} IPv4 forwarding выключен"
 fi
 
 echo
 
 # ------------------------------------------------------------
-# 7. Проверка backend iptables/nftables
+# IPTABLES BACKEND
 # ------------------------------------------------------------
-print_section "7. IPTABLES / NFT BACKEND"
+
+echo "------------------------------------------------------"
+echo " IPTABLES BACKEND"
+echo "------------------------------------------------------"
 
 update-alternatives --display iptables || true
 
 echo
-CURRENT_BACKEND=$(update-alternatives --display iptables 2>/dev/null | grep 'link currently points to' || true)
+
+CURRENT_BACKEND=$(update-alternatives --display iptables 2>/dev/null | grep "link currently points to" || true)
+
 echo "${CURRENT_BACKEND}"
 
 echo
-if echo "${CURRENT_BACKEND}" | grep -q 'iptables-nft'; then
-    echo -e "${OK} iptables-nft backend active"
+
+if echo "${CURRENT_BACKEND}" | grep -q "iptables-nft"; then
+    echo -e "${OK} Используется iptables-nft backend"
 else
-    echo -e "${WARN} iptables-legacy backend active"
-    echo -e "${WARN} Recommended command:"
-    echo "update-alternatives --set iptables /usr/sbin/iptables-nft"
+    echo -e "${WARN} Используется legacy backend"
 fi
 
 echo
 
 # ------------------------------------------------------------
-# 8. Проверка nftables
+# NFTABLES RULESET
 # ------------------------------------------------------------
-print_section "8. NFTABLES"
+
+echo "------------------------------------------------------"
+echo " NFTABLES RULESET"
+echo "------------------------------------------------------"
 
 if systemctl is-active nftables >/dev/null 2>&1; then
-    echo -e "${OK} nftables service active"
+    echo -e "${OK} nftables.service active"
 else
-    echo -e "${WARN} nftables service inactive"
+    echo -e "${WARN} nftables.service inactive"
 fi
 
 echo
-nft list ruleset 2>/dev/null || true
+
+echo "Текущий nftables ruleset:"
+echo
+
+nft list ruleset || true
 
 echo
+
+# Проверяем NAT
 if nft list ruleset 2>/dev/null | grep -qi masquerade; then
-    echo -e "${OK} NAT masquerade rule found"
+    echo -e "${OK} NAT masquerade найден"
 else
-    echo -e "${WARN} NAT masquerade not found in nftables"
+    echo -e "${WARN} NAT masquerade НЕ найден"
+fi
+
+echo
+
+# Проверяем SSH accept
+if nft list ruleset 2>/dev/null | grep -q "dport ${SSH_PORT}"; then
+    echo -e "${OK} SSH разрешен в nftables"
+else
+    echo -e "${WARN} SSH accept rule не обнаружен"
 fi
 
 echo
 
 # ------------------------------------------------------------
-# 9. Проверка iptables правил
+# IPTABLES COMPAT
 # ------------------------------------------------------------
-print_section "9. IPTABLES RULES"
 
-iptables -L -n -v 2>/dev/null || true
+echo "------------------------------------------------------"
+echo " IPTABLES COMPATIBILITY"
+echo "------------------------------------------------------"
+
+echo "FILTER:"
+echo
+
+iptables -L -n -v || true
 
 echo
-iptables -t nat -L -n -v 2>/dev/null || true
+
+echo "NAT:"
+echo
+
+iptables -t nat -L -n -v || true
 
 echo
-if iptables -t nat -L 2>/dev/null | grep -q MASQUERADE; then
-    echo -e "${OK} MASQUERADE rule exists"
+
+if iptables -t nat -L | grep -q MASQUERADE; then
+    echo -e "${OK} MASQUERADE присутствует"
 else
-    echo -e "${WARN} MASQUERADE rule missing"
+    echo -e "${WARN} MASQUERADE отсутствует"
 fi
 
 echo
-if iptables -L FORWARD 2>/dev/null | grep -q ACCEPT; then
-    echo -e "${OK} FORWARD rules detected"
-else
-    echo -e "${WARN} FORWARD rules missing"
-fi
-
-echo
 
 # ------------------------------------------------------------
-# 10. Проверка dnsmasq
+# DNSMASQ
 # ------------------------------------------------------------
-print_section "10. DNSMASQ"
+
+echo "------------------------------------------------------"
+echo " DNSMASQ"
+echo "------------------------------------------------------"
 
 if systemctl is-active dnsmasq >/dev/null 2>&1; then
-    echo -e "${OK} dnsmasq running"
+    echo -e "${OK} dnsmasq active"
 else
-    echo -e "${WARN} dnsmasq not running"
+    echo -e "${WARN} dnsmasq inactive"
 fi
 
 echo
+
 systemctl --no-pager --full status dnsmasq || true
 
 echo
-printf 'dnsmasq leases:\n'
+
+echo "DHCP leases:"
+echo
+
 cat /var/lib/misc/dnsmasq.leases 2>/dev/null || true
 
 echo
+echo "------------------------------------------------------"
+echo " PROXMOX FIREWALL SERVICES"
+echo "------------------------------------------------------"
 
-# ------------------------------------------------------------
-# 11. Проверка Proxmox firewall
-# ------------------------------------------------------------
-print_section "11. PROXMOX FIREWALL"
+systemctl --no-pager --full status proxmox-firewall || true
+
+echo
+systemctl --no-pager --full status pve-firewall || true
+
+echo
+echo "------------------------------------------------------"
+echo " PVE FIREWALL MANAGEMENT STATUS"
+echo "------------------------------------------------------"
+
 pve-firewall status || true
+
 echo
 
 # ------------------------------------------------------------
-# 12. Проверка fstrim.timer
+# FSTRIM
 # ------------------------------------------------------------
-print_section "12. FSTRIM"
+
+echo "------------------------------------------------------"
+echo " FSTRIM"
+echo "------------------------------------------------------"
+
 systemctl status fstrim.timer --no-pager || true
+
 echo
 
 # ------------------------------------------------------------
-# 13. Проверка сетевых конфигураций VM
+# VM NETWORK CONFIGS
 # ------------------------------------------------------------
-print_section "13. VM NETWORK CONFIGS"
 
-qm list | awk 'NR>1 {print $1}' | while read -r VMID; do
+echo "------------------------------------------------------"
+echo " VM NETWORK CONFIGS"
+echo "------------------------------------------------------"
+
+for VMID in $(qm list | awk 'NR>1 {print $1}'); do
     echo
     echo "VMID: ${VMID}"
+
     qm config "${VMID}" | grep -E 'net0|agent|ipconfig' || true
+done
+
+echo
+
+# ------------------------------------------------------------
+# RECOMMENDATIONS
+# ------------------------------------------------------------
+
+echo "------------------------------------------------------"
+echo " RECOMMENDATIONS"
+echo "------------------------------------------------------"
+
+echo
+
+if ! echo "${CURRENT_BACKEND}" | grep -q "iptables-nft"; then
+    echo -e "${WARN} Рекомендуется перейти на nft backend:"
     echo
- done
-
-echo
-
-# ------------------------------------------------------------
-# 14. Рекомендации
-# ------------------------------------------------------------
-print_section "14. RECOMMENDATIONS"
-
-echo
-if ! echo "${CURRENT_BACKEND}" | grep -q 'iptables-nft'; then
-    echo -e "${WARN} Switch to nft backend:"
     echo "update-alternatives --set iptables /usr/sbin/iptables-nft"
     echo
 fi
 
-if ! iptables -L FORWARD 2>/dev/null | grep -q ACCEPT; then
-    echo -e "${WARN} Add FORWARD rules:"
-    echo "iptables -A FORWARD -i ${INTERNAL_BRIDGE} -o ${WAN_BRIDGE} -j ACCEPT"
-    echo "iptables -A FORWARD -i ${WAN_BRIDGE} -o ${INTERNAL_BRIDGE} -m conntrack --ctstate RELATED,ESTABLISHED -j ACCEPT"
+if ! nft list ruleset 2>/dev/null | grep -qi masquerade; then
+    echo -e "${WARN} NAT masquerade отсутствует"
+    echo
+    echo "Проверьте NAT/firewall configuration."
     echo
 fi
 
-if ! iptables -t nat -L 2>/dev/null | grep -q MASQUERADE; then
-    echo -e "${WARN} Add NAT rule:"
-    echo "iptables -t nat -A POSTROUTING -s 10.10.10.0/24 -o ${WAN_BRIDGE} -j MASQUERADE"
+if [[ "$(sysctl -n net.ipv4.ip_forward)" != "1" ]]; then
+    echo -e "${WARN} IPv4 forwarding выключен"
+    echo
+    echo "sysctl -w net.ipv4.ip_forward=1"
     echo
 fi
 
-echo -e "${INFO} Audit complete"
+echo -e "${INFO} Аудит завершен"
 echo
