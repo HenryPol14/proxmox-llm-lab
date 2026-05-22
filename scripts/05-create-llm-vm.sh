@@ -68,11 +68,19 @@ qm set "$VMID" --scsi1 "${STORAGE}:${DATA_DISK_SIZE}",discard=on,ssd=1,iothread=
 echo "=== Запуск VM ==="
 qm start "$VMID"
 
+# Включаем автозагрузку VM.
+qm set "$VMID" --onboot 1
+
 echo "=== Ожидание QEMU Guest Agent ==="
-until qm guest exec "$VMID" -- uptime >/dev/null 2>&1; do
-  sleep 5
-  echo "Ожидание guest agent..."
+for i in {1..30}; do
+  if qm guest exec "$VMID" -- uptime >/dev/null 2>&1; then
+    echo "Guest Agent готов."
+    break
+  fi
+  echo "Ожидание guest agent... ($i/30)"
+  sleep 2
 done
+
 
 # 6. Выполняем базовую настройку внутри гостевой ОС.
 echo "=== Настройка гостевой ОС ==="

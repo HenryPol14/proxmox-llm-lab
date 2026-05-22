@@ -24,11 +24,14 @@ if ! command -v virt-customize >/dev/null 2>&1; then
   exit 1
 fi
 
-# 3. Готовим образ: устанавливаем qemu-guest-agent и очищаем machine-id.
+# 3. Готовим образ: устанавливаем qemu-guest-agent, настраиваем консоль и очищаем machine-id.
 echo "=== Подготовка cloud-образа ==="
 virt-customize -a "$IMG" \
   --install qemu-guest-agent,curl \
   --run-command "sed -i 's/^#DNSStubListener=yes/DNSStubListener=no/' /etc/systemd/resolved.conf || true" \
+  --run-command "sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=\"\(.*\)\"/GRUB_CMDLINE_LINUX_DEFAULT=\"\1 console=tty0 console=ttyS0,115200n8\"/' /etc/default/grub" \
+  --run-command "update-grub" \
+  --run-command "rm -f /etc/netplan/*.yaml" \
   --truncate /etc/machine-id
 
 # 4. Удаляем VM с таким же VMID, если она уже существует.
