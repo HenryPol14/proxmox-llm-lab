@@ -3,9 +3,8 @@ set -euo pipefail
 IFS=$'\n\t'
 
 # Описание: Создает Proxmox VM на основе Ubuntu cloud-образа и превращает её в шаблон cloud-init.
-# Использование: sudo scripts/04-create-cloudinit-template.sh
 # Примечание: Требует установленного пакета libguestfs-tools для virt-customize.
-#            В шаблон добавляется QEMU Guest Agent, но сетевые параметры cloud-init задаются при создании клона.
+# В шаблон добавляется QEMU Guest Agent, но сетевые параметры cloud-init задаются при создании клона.
 
 VMID=9000
 STORAGE=SSD-VMs
