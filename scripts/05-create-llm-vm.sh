@@ -48,6 +48,7 @@ qm set "$VMID" \
   --agent enabled=1 \
   --net0 virtio,bridge=vmbr1,queues=8 \
   --ciuser ubuntu \
+  --cipassword ubuntu \
   --ipconfig0 ip=dhcp
 
 # 3. Проброс GPU.
