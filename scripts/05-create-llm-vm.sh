@@ -46,6 +46,7 @@ fi
 qm set "$VMID" \
   --net0 virtio,bridge=vmbr1 \
   --ciuser ubuntu \
+  --cipassword "ubuntu" \
   --ipconfig0 ip=dhcp \
   --sshkeys ~/.ssh/id_rsa.pub # Авто-добавление ключа
 

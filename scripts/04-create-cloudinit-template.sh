@@ -32,6 +32,7 @@ fi
 # 3. Создание ВМ
 qm create "$VMID" \
   --name "$VM_NAME" \
+  --ostype l26 \
   --memory "$MEM" \
   --cores "$CORES" \
   --cpu host \
