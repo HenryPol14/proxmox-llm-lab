@@ -11,5 +11,10 @@ if ! command -v docker >/dev/null 2>&1; then
   exit 1
 fi
 
-docker compose -f docker/monitoring/docker-compose.yml up -d
-echo "MONITORING STACK DEPLOYED"
+if [[ -f docker/monitoring/docker-compose.yml ]]; then
+  docker compose -f docker/monitoring/docker-compose.yml up -d
+  echo "MONITORING STACK DEPLOYED"
+else
+  echo "ERROR: файл docker/monitoring/docker-compose.yml не найден." >&2
+  exit 1
+fi

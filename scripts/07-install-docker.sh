@@ -11,9 +11,13 @@ if ! command -v curl >/dev/null 2>&1; then
   exit 1
 fi
 
-curl -fsSL https://get.docker.com | sh
-systemctl enable docker
-systemctl start docker
+if ! command -v docker >/dev/null 2>&1; then
+  curl -fsSL https://get.docker.com | sh
+  systemctl enable docker
+  systemctl start docker
+else
+  echo "Docker уже установлен. Пропускаю установку и запуск."
+fi
 
 if [[ -n "${SUDO_USER:-}" ]]; then
   usermod -aG docker "$SUDO_USER"
