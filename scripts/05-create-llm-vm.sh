@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 VMID=${1:-110}
 NAME="llm-server"
 TEMPLATE=9000
@@ -60,6 +61,13 @@ build_ipconfig0() {
   fi
 }
 
+run_guest_script() {
+  local script_name="$1"
+
+  echo "=== Запуск $script_name в госте ==="
+  cat "${SCRIPT_DIR}/scripts/$script_name" | qm guest exec "$VMID" --pass-stdin -- bash -lc "cat > /tmp/$script_name && bash /tmp/$script_name"
+}
+
 ensure_guest_interfaces_up() {
   qm guest exec "$VMID" -- bash -lc 'set +e
 printf "\n== Состояние интерфейсов до коррекции ==\n"
@@ -88,6 +96,37 @@ printf "\n== Cloud-init ==\n"
 cloud-init status --long 2>/dev/null || true
 cat /var/log/cloud-init.log 2>/dev/null | tail -n 50 || true
 ' 2>/dev/null || true
+}
+
+wait_for_guest_agent() {
+  echo "=== Ожидание QEMU Guest Agent ==="
+  for i in {1..30}; do
+    if qm guest exec "$VMID" -- uptime >/dev/null 2>&1; then
+      echo "Guest Agent готов."
+      return 0
+    fi
+    echo "Ожидание guest agent... ($i/30)"
+    sleep 2
+  done
+
+  echo "ERROR: Guest Agent не поднялся." >&2
+  exit 1
+}
+
+wait_for_guest_ip() {
+  echo "=== Ждем IP адрес ==="
+  local ip_addr=""
+  for i in {1..12}; do
+    ip_addr=$(qm guest exec "$VMID" -- bash -lc "ip -4 -o addr show scope global | awk '{print \$4}' | cut -d/ -f1 | grep -v '^127\.' | head -n1" 2>/dev/null || true)
+    if [[ -n "$ip_addr" ]]; then
+      echo "$ip_addr"
+      return 0
+    fi
+    echo "Ожидание DHCP... ($((i*5))s)"
+    sleep 5
+  done
+
+  return 1
 }
 
 if [[ $EUID -ne 0 ]]; then
@@ -147,10 +186,8 @@ fi
 
 qm resize "$VMID" scsi0 "$SYS_DISK_SIZE" || true
 qm set "$VMID" --scsi1 "${STORAGE}:${DATA_DISK_SIZE_GIB}",discard=on,ssd=1,iothread=1
-
-# Включаем автозапуск VM и запоминаем MAC адрес сетевого интерфейса.
-# MAC нужен для поиска точного DHCP lease на хосте.
 qm set "$VMID" --onboot 1
+
 VM_MAC=$(qm config "$VMID" | grep -oE 'virtio=[0-9A-Fa-f:]{17}' | head -n1 | cut -d= -f2 || true)
 
 if qm status "$VMID" 2>/dev/null | grep -q 'running'; then
@@ -159,50 +196,15 @@ else
   qm start "$VMID"
 fi
 
-echo "=== Ожидание QEMU Guest Agent ==="
-for i in {1..30}; do
-  if qm guest exec "$VMID" -- uptime >/dev/null 2>&1; then
-    echo "Guest Agent готов."
-    break
-  fi
-  echo "Ожидание guest agent... ($i/30)"
-  sleep 2
-  if [[ $i -eq 30 ]]; then
-    echo "ERROR: Guest Agent не поднялся." >&2
-    exit 1
-  fi
-done
-
-echo "=== Анализ сети гостя ==="
+wait_for_guest_agent
 ensure_guest_interfaces_up
 print_guest_network_diagnostics
 
-echo "=== Настройка гостевой ОС ==="
-qm guest exec "$VMID" -- bash -lc "set -e
-apt-get update
-apt-get install -y curl gnupg lsb-release
-curl -fsSL https://get.docker.com | sh
-curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg
-distribution=\"\$(. /etc/os-release; echo \$ID\$VERSION_ID)\"
-url=\"https://nvidia.github.io/libnvidia-container/ubuntu\${distribution}/nvidia-container-toolkit.list\"
-curl -s -L \"\$url\" | sed 's#deb https://#deb [signed-by=/usr/share/keyrings/nvidia-container-toolkit-keyring.gpg] https://#g' > /etc/apt/sources.list.d/nvidia-container-toolkit.list
-apt-get update
-apt-get install -y nvidia-container-toolkit
-nvidia-ctk runtime configure --runtime=docker
-systemctl restart docker"
+run_guest_script 07-install-docker.sh
+run_guest_script 08-install-nvidia-toolkit.sh
+run_guest_script 09-deploy-ollama.sh
 
-echo "=== Ждем IP адрес ==="
-IP_ADDR=""
-for i in {1..12}; do
-  IP_ADDR=$(qm guest exec "$VMID" -- bash -lc "ip -4 -o addr show scope global | awk '{print \$4}' | cut -d/ -f1 | grep -v '^127\.' | head -n1" 2>/dev/null || true)
-  if [[ -n "$IP_ADDR" ]]; then
-    break
-  fi
-  echo "Ожидание DHCP... ($((i*5))s)"
-  sleep 5
-done
-
-if [[ -n "$IP_ADDR" ]]; then
+if IP_ADDR=$(wait_for_guest_ip); then
   echo "=== VM готова ==="
   echo "IP адрес: $IP_ADDR"
   echo "Подключение: ssh ubuntu@$IP_ADDR"
