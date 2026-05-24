@@ -8,12 +8,29 @@ STORAGE="SSD-VMs"
 MEM=20480
 CORES=4
 SYS_DISK_SIZE="44G"
-DATA_DISK_SIZE="120G"
+DATA_DISK_SIZE="120"
 NETWORK_MODE="${NETWORK_MODE:-dhcp}"
 STATIC_IP="${STATIC_IP:-}"
 STATIC_PREFIX="${STATIC_PREFIX:-24}"
 STATIC_GATEWAY="${STATIC_GATEWAY:-}"
 STATIC_DNS="${STATIC_DNS:-}"
+
+normalize_data_disk_size() {
+  local value="$1"
+
+  if [[ "$value" =~ ^[0-9]+$ ]]; then
+    echo "$value"
+    return
+  fi
+
+  if [[ "$value" =~ ^([0-9]+)[Gg]$ ]]; then
+    echo "${BASH_REMATCH[1]}"
+    return
+  fi
+
+  echo "ERROR: DATA_DISK_SIZE должен быть числом в GiB или строкой вида 120G. Получено: $value" >&2
+  exit 1
+}
 
 build_ipconfig0() {
   if [[ "$NETWORK_MODE" == "dhcp" ]]; then
@@ -97,6 +114,9 @@ else
   qm clone "$TEMPLATE" "$VMID" --name "$NAME" --full true
 fi
 
+DATA_DISK_SIZE_GIB=$(normalize_data_disk_size "$DATA_DISK_SIZE")
+echo "DATA_DISK_SIZE=${DATA_DISK_SIZE} -> ${DATA_DISK_SIZE_GIB}GiB"
+
 echo "=== Сетевой режим ==="
 echo "NETWORK_MODE=${NETWORK_MODE}"
 if [[ "$NETWORK_MODE" == "manual" ]]; then
@@ -126,7 +146,7 @@ else
 fi
 
 qm resize "$VMID" scsi0 "$SYS_DISK_SIZE" || true
-qm set "$VMID" --scsi1 "${STORAGE}:${DATA_DISK_SIZE}",discard=on,ssd=1,iothread=1
+qm set "$VMID" --scsi1 "${STORAGE}:${DATA_DISK_SIZE_GIB}",discard=on,ssd=1,iothread=1
 
 # Включаем автозапуск VM и запоминаем MAC адрес сетевого интерфейса.
 # MAC нужен для поиска точного DHCP lease на хосте.
