@@ -9,6 +9,69 @@ MEM=20480
 CORES=4
 SYS_DISK_SIZE="44G"
 DATA_DISK_SIZE="120G"
+NETWORK_MODE="${NETWORK_MODE:-dhcp}"
+STATIC_IP="${STATIC_IP:-}"
+STATIC_PREFIX="${STATIC_PREFIX:-24}"
+STATIC_GATEWAY="${STATIC_GATEWAY:-}"
+STATIC_DNS="${STATIC_DNS:-}"
+
+build_ipconfig0() {
+  if [[ "$NETWORK_MODE" == "dhcp" ]]; then
+    echo "ip=dhcp"
+    return
+  fi
+
+  if [[ "$NETWORK_MODE" != "manual" ]]; then
+    echo "ERROR: NETWORK_MODE поддерживает только dhcp или manual" >&2
+    exit 1
+  fi
+
+  if [[ -z "$STATIC_IP" || -z "$STATIC_GATEWAY" ]]; then
+    echo "ERROR: NETWORK_MODE=manual требует STATIC_IP и STATIC_GATEWAY" >&2
+    exit 1
+  fi
+
+  local normalized_ip="$STATIC_IP"
+  if [[ "$normalized_ip" != */* ]]; then
+    normalized_ip="${normalized_ip}/${STATIC_PREFIX}"
+  fi
+
+  if [[ -n "$STATIC_DNS" ]]; then
+    echo "ip=${normalized_ip},gw=${STATIC_GATEWAY},dns=${STATIC_DNS}"
+  else
+    echo "ip=${normalized_ip},gw=${STATIC_GATEWAY}"
+  fi
+}
+
+ensure_guest_interfaces_up() {
+  qm guest exec "$VMID" -- bash -lc 'set +e
+printf "\n== Состояние интерфейсов до коррекции ==\n"
+ip -o link show
+for iface in $(ip -o link show | cut -d" " -f2 | cut -d: -f1); do
+  state=$(cat /sys/class/net/${iface}/operstate 2>/dev/null || echo unknown)
+  if [[ "$state" != "up" ]]; then
+    echo "Поднимаю интерфейс ${iface} (state=$state)"
+    ip link set "$iface" up
+  fi
+done
+printf "\n== Состояние интерфейсов после коррекции ==\n"
+ip -o link show
+'
+}
+
+print_guest_network_diagnostics() {
+  qm guest exec "$VMID" -- bash -lc 'set +e
+printf "\n== Интерфейсы ==\n"
+ip -o link show || true
+printf "\n== Адреса ==\n"
+ip -4 -o addr show scope global || true
+printf "\n== Маршруты ==\n"
+ip r || true
+printf "\n== Cloud-init ==\n"
+cloud-init status --long 2>/dev/null || true
+cat /var/log/cloud-init.log 2>/dev/null | tail -n 50 || true
+' 2>/dev/null || true
+}
 
 if [[ $EUID -ne 0 ]]; then
   echo "Ошибка: запустите скрипт от root" >&2
@@ -25,11 +88,21 @@ if ! qm config "$TEMPLATE" >/dev/null 2>&1; then
   exit 1
 fi
 
+IPCONFIG0=$(build_ipconfig0)
+
 echo "=== Подготовка VM $VMID ==="
 if qm config "$VMID" >/dev/null 2>&1; then
   echo "VM $VMID уже существует. Обновляю конфигурацию без пересоздания."
 else
   qm clone "$TEMPLATE" "$VMID" --name "$NAME" --full true
+fi
+
+echo "=== Сетевой режим ==="
+echo "NETWORK_MODE=${NETWORK_MODE}"
+if [[ "$NETWORK_MODE" == "manual" ]]; then
+  echo "STATIC_IP=${STATIC_IP}"
+  echo "STATIC_PREFIX=${STATIC_PREFIX}"
+  echo "STATIC_GATEWAY=${STATIC_GATEWAY}"
 fi
 
 qm set "$VMID" \
@@ -42,8 +115,7 @@ qm set "$VMID" \
   --agent enabled=1 \
   --net0 virtio,bridge=vmbr1,queues=8 \
   --ciuser ubuntu \
-  --cipassword ubuntu \
-  --ipconfig0 ip=dhcp
+  --ipconfig0 "$IPCONFIG0"
 
 GPU_ADDR=$(lspci -d 10de: | awk 'NR==1 {print $1}')
 if [[ -n "$GPU_ADDR" ]]; then
@@ -81,6 +153,10 @@ for i in {1..30}; do
   fi
 done
 
+echo "=== Анализ сети гостя ==="
+ensure_guest_interfaces_up
+print_guest_network_diagnostics
+
 echo "=== Настройка гостевой ОС ==="
 qm guest exec "$VMID" -- bash -lc "set -e
 apt-get update
@@ -111,17 +187,12 @@ if [[ -n "$IP_ADDR" ]]; then
   echo "IP адрес: $IP_ADDR"
   echo "Подключение: ssh ubuntu@$IP_ADDR"
 else
-  # Если IP так и не появился, нужно понять, где именно падает цепочка:
-  # 1) DHCP на хосте не выдал lease;
-  # 2) DHCP lease есть, но guest не получил адрес;
-  # 3) guest получил lease, но сеть не поднялась или cloud-init не завершился.
   echo "ERROR: IP адрес не получен за 60 секунд." >&2
   echo "Проверьте следующие пункты:" >&2
   echo "1. DHCP доступен на мосте vmbr1." >&2
   echo "2. Внутри VM запущен cloud-init / guest agent." >&2
   echo "3. Нет блокировки трафика на хосте или в firewall." >&2
 
-  # Диагностика хоста: bridge, dnsmasq и DHCP leases.
   echo "--- Диагностика хоста ---" >&2
   if ip link show vmbr1 >/dev/null 2>&1; then
     echo "vmbr1 существует"
@@ -159,22 +230,10 @@ else
     echo "dnsmasq.leases не найден"
   fi
 
-  # Печатаем текущие nftables правила, чтобы увидеть, нет ли блокировок на хосте.
   nft list ruleset 2>/dev/null | sed -n '1,80p' || true
 
-  # Диагностика guest: состояние интерфейсов, адреса и cloud-init.
   echo "--- Диагностика гостевой ОС ---" >&2
-  qm guest exec "$VMID" -- bash -lc "set +e
-if ip -o link show | grep -q 'state UP'; then
-  echo 'guest_links=up'
-else
-  echo 'guest_links=down'
-fi
-ip -o link show || true
-ip -4 -o addr show scope global || true
-cloud-init status --long 2>/dev/null || true
-cat /var/log/cloud-init.log 2>/dev/null | tail -n 40 || true
-" 2>/dev/null || true
+  print_guest_network_diagnostics
 
   if [[ -n "$lease_match" ]]; then
     echo "Причина 3: guest не получил IP несмотря на lease. Проверьте cloud-init, guest agent и интерфейс в guest." >&2

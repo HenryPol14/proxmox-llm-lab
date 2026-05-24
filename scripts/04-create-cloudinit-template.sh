@@ -5,9 +5,15 @@ set -euo pipefail
 VMID=9000
 STORAGE=SSD-VMs
 IMG="/var/lib/vz/template/qcow2/ubuntu-26.04.img"
+SSH_PUBLIC_KEY="${SSH_PUBLIC_KEY:-$HOME/.ssh/id_rsa.pub}"
 
 if [[ ! -f "$IMG" ]]; then
   echo "ERROR: Образ не найден: $IMG" >&2
+  exit 1
+fi
+
+if [[ ! -f "$SSH_PUBLIC_KEY" ]]; then
+  echo "ERROR: SSH public key not found: $SSH_PUBLIC_KEY" >&2
   exit 1
 fi
 
@@ -28,8 +34,11 @@ if qm config "$VMID" >/dev/null 2>&1; then
     echo "FORCE_REBUILD=1: удаляю старый шаблон $VMID и создаю заново."
     qm destroy "$VMID" --purge
   else
-    echo "Шаблон $VMID уже существует. Пропускаю пересоздание, чтобы не портить текущую конфигурацию."
-    echo "Если нужно пересоздать шаблон, запустите скрипт с FORCE_REBUILD=1."
+    echo "Шаблон $VMID уже существует. Обновляю только cloud-init ключ и оставляю шаблон без пересоздания."
+    qm set "$VMID" \
+      --ciuser ubuntu \
+      --sshkey "$SSH_PUBLIC_KEY"
+    echo "SSH-ключ в шаблоне обновлен. Если нужно полностью пересоздать шаблон, запустите скрипт с FORCE_REBUILD=1."
     exit 0
   fi
 fi
@@ -57,6 +66,9 @@ qm set "$VMID" --scsihw virtio-scsi-single --scsi0 "$DISK_VOL",discard=on,ssd=1
 qm set "$VMID" --ide2 "${STORAGE}:cloudinit"
 qm set "$VMID" --boot order=scsi0
 qm set "$VMID" --serial0 socket --vga serial0
+qm set "$VMID" \
+  --ciuser ubuntu \
+  --sshkey "$SSH_PUBLIC_KEY"
 
 echo "Converting to template..."
 qm template "$VMID"

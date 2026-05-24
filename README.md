@@ -79,3 +79,75 @@ Checks:
 - dnsmasq
 - forwarding
 - VM networking
+
+## SSH-ключ для шаблона
+
+Шаблон в `scripts/04-create-cloudinit-template.sh` хранит SSH-ключ в cloud-init и использует его для всех новых VM.
+
+### Обновить ключ без пересоздания шаблона
+
+```bash
+./scripts/04-create-cloudinit-template.sh
+```
+
+По умолчанию скрипт использует `~/.ssh/id_rsa.pub`. Если нужен другой ключ, задайте переменную окружения:
+
+```bash
+SSH_PUBLIC_KEY=~/.ssh/my-key.pub ./scripts/04-create-cloudinit-template.sh
+```
+
+### Полностью пересоздать шаблон
+
+```bash
+FORCE_REBUILD=1 ./scripts/04-create-cloudinit-template.sh
+```
+
+Это удалит старый шаблон `9000` и создаст новый заново.
+
+## Ручной IP и диагностика интерфейсов
+
+Если DHCP не срабатывает сразу после создания VM, можно запускать создание в ручном режиме и проверять состояние интерфейсов в госте.
+
+### Ручной IP для LLM VM
+
+```bash
+NETWORK_MODE=manual \
+STATIC_IP=10.10.10.50 \
+STATIC_PREFIX=24 \
+STATIC_GATEWAY=10.10.10.1 \
+STATIC_DNS=10.10.10.1 \
+./scripts/05-create-llm-vm.sh
+```
+
+### Ручной IP для monitoring VM
+
+```bash
+NETWORK_MODE=manual \
+STATIC_IP=10.10.10.60 \
+STATIC_PREFIX=24 \
+STATIC_GATEWAY=10.10.10.1 \
+STATIC_DNS=10.10.10.1 \
+./scripts/06-create-monitoring-vm.sh
+```
+
+### Что делает скрипт при создании VM
+
+- пытается получить IP по DHCP;
+- если IP не появился, выполняет диагностику интерфейсов в госте;
+- поднимает интерфейсы, которые оказались в состоянии `DOWN`;
+- выводит текущие адреса, маршруты и `cloud-init`-лог;
+- если проблема остаётся, показывает диагностику хоста и текущие DHCP-lease.
+
+### Быстрая ручная проверка в госте
+
+После старта VM можно зайти в неё и проверить состояние интерфейса вручную:
+
+```bash
+ssh ubuntu@<ip>
+ip -o link show
+ip -4 -o addr show scope global
+ip r
+sudo ip link set ens18 up
+```
+
+Если интерфейс не поднимается, проверьте корректность bridge и dnsmasq на Proxmox хосте через `./scripts/11-audit-network.sh`.

@@ -7,6 +7,39 @@ NAME="monitoring-vm"
 # Хранилище и шаблон, от которого будет клонироваться VM.
 STORAGE="SSD-VMs"
 TEMPLATE=9000
+NETWORK_MODE="${NETWORK_MODE:-dhcp}"
+STATIC_IP="${STATIC_IP:-}"
+STATIC_PREFIX="${STATIC_PREFIX:-24}"
+STATIC_GATEWAY="${STATIC_GATEWAY:-}"
+STATIC_DNS="${STATIC_DNS:-}"
+
+build_ipconfig0() {
+  if [[ "$NETWORK_MODE" == "dhcp" ]]; then
+    echo "ip=dhcp"
+    return
+  fi
+
+  if [[ "$NETWORK_MODE" != "manual" ]]; then
+    echo "ERROR: NETWORK_MODE поддерживает только dhcp или manual" >&2
+    exit 1
+  fi
+
+  if [[ -z "$STATIC_IP" || -z "$STATIC_GATEWAY" ]]; then
+    echo "ERROR: NETWORK_MODE=manual требует STATIC_IP и STATIC_GATEWAY" >&2
+    exit 1
+  fi
+
+  local normalized_ip="$STATIC_IP"
+  if [[ "$normalized_ip" != */* ]]; then
+    normalized_ip="${normalized_ip}/${STATIC_PREFIX}"
+  fi
+
+  if [[ -n "$STATIC_DNS" ]]; then
+    echo "ip=${normalized_ip},gw=${STATIC_GATEWAY},dns=${STATIC_DNS}"
+  else
+    echo "ip=${normalized_ip},gw=${STATIC_GATEWAY}"
+  fi
+}
 
 # Скрипт должен запускаться от root, потому что управляет Proxmox и qm.
 if [[ $EUID -ne 0 ]]; then
@@ -26,12 +59,22 @@ if ! qm config "$TEMPLATE" >/dev/null 2>&1; then
   exit 1
 fi
 
+IPCONFIG0=$(build_ipconfig0)
+
 # Создаем VM только если она еще не существует; иначе обновляем конфигурацию.
 echo "=== Подготовка VM $VMID ==="
 if qm config "$VMID" >/dev/null 2>&1; then
   echo "VM $VMID уже существует. Обновляю конфигурацию без пересоздания."
 else
   qm clone "$TEMPLATE" "$VMID" --name "$NAME" --full true
+fi
+
+echo "=== Сетевой режим ==="
+echo "NETWORK_MODE=${NETWORK_MODE}"
+if [[ "$NETWORK_MODE" == "manual" ]]; then
+  echo "STATIC_IP=${STATIC_IP}"
+  echo "STATIC_PREFIX=${STATIC_PREFIX}"
+  echo "STATIC_GATEWAY=${STATIC_GATEWAY}"
 fi
 
 # Настраиваем железо и сеть мониторинговой VM.
@@ -43,12 +86,10 @@ qm set "$VMID" \
   --scsi0 "${STORAGE}:32" \
   --net0 virtio,bridge=vmbr1
 
-# Включаем cloud-init и передаем SSH ключ для доступа к VM.
+# Включаем cloud-init и используем настройки шаблона.
 qm set "$VMID" \
   --ciuser ubuntu \
-  --cipassword ubuntu \
-  --sshkey ~/.ssh/id_rsa.pub \
-  --ipconfig0 ip=dhcp
+  --ipconfig0 "$IPCONFIG0"
 
 # Запускаем VM после завершения конфигурации, если она еще не работает.
 if qm status "$VMID" 2>/dev/null | grep -q 'running'; then
