@@ -92,3 +92,7 @@ done
 
 log_info "VM $VMID готова. IP: $STATIC_IP"
 log_info "Подключение: ssh ubuntu@$STATIC_IP"
+# Удаляем старый ключ хоста из known_hosts (если существует) и добавляем новый
+ssh-keygen -R "$STATIC_IP" >/dev/null 2>&1 || true
+ssh-keyscan -H "$STATIC_IP" >> "$HOME/.ssh/known_hosts"
+
