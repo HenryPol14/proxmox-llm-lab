@@ -69,7 +69,7 @@ if [[ "$DATA_DISK_SIZE" =~ ^([0-9]+)[Gg]?$ ]]; then
 else
   DATA_GIB="$DATA_DISK_SIZE"
 fi
-qm set "$VMID" --scsi1 "${STORAGE}:${DATA_GIB}G,discard=on,ssd=1,iothread=1"
+qm set "$VMID" --scsi1 "${STORAGE}:${DATA_GIB},discard=on,ssd=1,iothread=1"
 qm set "$VMID" --onboot 1
 
 # Запускаем VM, если она ещё не запущена
