@@ -8,7 +8,7 @@ NAME="monitoring-vm"
 # Хранилище и шаблон, от которого будет клонироваться VM.
 STORAGE="SSD-VMs"
 TEMPLATE=9000
-NETWORK_MODE="${NETWORK_MODE:-dhcp}"
+NETWORK_MODE="${NETWORK_MODE:-manual}"
 STATIC_IP="${STATIC_IP:-}"
 STATIC_PREFIX="${STATIC_PREFIX:-24}"
 STATIC_GATEWAY="${STATIC_GATEWAY:-}"
