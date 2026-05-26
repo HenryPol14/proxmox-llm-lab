@@ -38,7 +38,7 @@ fi
 IPCONFIG="ip=${STATIC_IP}/${STATIC_PREFIX},gw=${STATIC_GATEWAY}"
 
 # Configure hardware, network and disks
-qm set "$VMID" \
+if ! qm set "$VMID" \
   --memory "$MEM" \
   --cores "$CORES" \
   --cpu host \
@@ -50,19 +50,16 @@ qm set "$VMID" \
   --ipconfig0 "$IPCONFIG" \
   --nameserver "$STATIC_DNS" \
   --scsi0 "${STORAGE}:32" \
-  --scsi1 "${STORAGE}:${DATA_DISK_SIZE},discard=on,ssd=1,iothread=1"
+  --scsi1 "${STORAGE}:${DATA_DISK_SIZE},discard=on,ssd=1,iothread=1"; then
+  log_error "Failed to configure VM $VMID hardware and network"
+  exit 1
+fi
 
 # GPU passthrough (if a NVIDIA device is present)
 GPU_ADDR=$(lspci -d 10de: | awk 'NR==1 {print $1}')
 if [[ -n "$GPU_ADDR" ]]; then
   log_info "Настройка GPU $GPU_ADDR"
   qm set "$VMID" --hostpci0 "$GPU_ADDR,pcie=1,x-vga=1"
-  # Blacklist Nouveau driver inside the guest and rebuild initramfs
-  qm guest exec "$VMID" -- bash -lc '
-    echo "blacklist nouveau" > /etc/modprobe.d/blacklist-nouveau.conf
-    echo "options nouveau modeset=0" >> /etc/modprobe.d/blacklist-nouveau.conf
-    update-initramfs -u
-  '
 else
   log_warn "NVIDIA GPU не найден – проброс пропущен"
 fi
