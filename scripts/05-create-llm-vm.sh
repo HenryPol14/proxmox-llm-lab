@@ -167,16 +167,9 @@ if [[ "$NETWORK_MODE" == "manual" ]]; then
 fi
 
 qm set "$VMID" \
-  --ostype l26 \
-  --memory "$MEM" \
-  --cores "$CORES" \
-  --cpu host \
-  --balloon 0 \
-  --numa 1 \
-  --agent enabled=1 \
-  --net0 virtio,bridge=vmbr1,queues=8 \
   --ciuser ubuntu \
-  --ipconfig0 "$IPCONFIG0"
+  --ipconfig0 "$IPCONFIG0" \
+  --nameserver "$STATIC_DNS"
 
 GPU_ADDR=$(lspci -d 10de: | awk 'NR==1 {print $1}')
 if [[ -n "$GPU_ADDR" ]]; then
