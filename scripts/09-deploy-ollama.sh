@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
-if [[ $EUID -ne 0 ]]; then
-  echo "Ошибка: запустите скрипт от root" >&2
-  exit 1
-fi
+source "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh"
+ensure_root
 
 if ! command -v docker >/dev/null 2>&1; then
-  echo "ERROR: docker не найден." >&2
+  log_error "docker not found."
   exit 1
 fi
 
@@ -59,4 +55,4 @@ fi
 
 cd "$TARGET_DIR"
 docker compose up -d
-echo "OLLAMA STACK DEPLOYED"
+log_info "OLLAMA STACK DEPLOYED"

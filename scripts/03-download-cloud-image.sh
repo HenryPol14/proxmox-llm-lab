@@ -1,16 +1,13 @@
 #!/usr/bin/env bash
-set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh"
+ensure_root
 
-if [[ $EUID -ne 0 ]]; then
-  echo "Ошибка: запустите скрипт от root" >&2
-  exit 1
-fi
 
 mkdir -p /var/lib/vz/template/qcow2
 cd /var/lib/vz/template/qcow2
 
 if [[ -f ubuntu-26.04.img ]]; then
-  echo "Образ ubuntu-26.04.img уже существует. Пропускаю повторную загрузку."
+  log_info "Образ ubuntu-26.04.img уже существует. Пропускаю повторную загрузку."
 else
   wget -O ubuntu-26.04.img \
     https://cloud-images.ubuntu.com/releases/26.04/release/ubuntu-26.04-server-cloudimg-amd64.img

@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
-if [[ $EUID -ne 0 ]]; then
-  echo "Ошибка: запустите скрипт от root" >&2
-  exit 1
-fi
+source "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh"
+ensure_root
 
 if ! command -v docker >/dev/null 2>&1; then
-  echo "ERROR: docker не найден. Сначала запустите 07-install-docker.sh." >&2
+  log_error "docker not found. Run 07-install-docker.sh first."
   exit 1
 fi
 
@@ -24,11 +20,11 @@ if ! dpkg -s nvidia-container-toolkit >/dev/null 2>&1; then
   nvidia-ctk runtime configure --runtime=docker
   systemctl restart docker
 else
-  echo "nvidia-container-toolkit уже установлен. Пропускаю установку и конфигурацию."
+  log_info "nvidia-container-toolkit already installed. Skipping installation and configuration."
 fi
 
 if docker run --rm --gpus all nvidia/cuda:12.8.0-base-ubuntu24.04 nvidia-smi >/dev/null 2>&1; then
-  echo "Проверка NVIDIA runtime прошла успешно."
+  log_info "NVIDIA runtime verification succeeded."
 else
   echo "WARN: проверка NVIDIA runtime не прошла. Проверьте драйверы и runtime." >&2
 fi

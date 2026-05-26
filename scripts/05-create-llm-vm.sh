@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh"
+ensure_root
 
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 VMID=${1:-110}
@@ -200,9 +201,7 @@ wait_for_guest_agent
 ensure_guest_interfaces_up
 print_guest_network_diagnostics
 
-run_guest_script 07-install-docker.sh
-run_guest_script 08-install-nvidia-toolkit.sh
-run_guest_script 09-deploy-ollama.sh
+
 
 if IP_ADDR=$(wait_for_guest_ip); then
   echo "=== VM готова ==="

@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-set -euo pipefail
+source "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh"
+ensure_root
 
 # Конфигурация
 VMID=9000
@@ -8,12 +9,12 @@ IMG="/var/lib/vz/template/qcow2/ubuntu-26.04.img"
 SSH_PUBLIC_KEY="${SSH_PUBLIC_KEY:-$HOME/.ssh/id_rsa.pub}"
 
 if [[ ! -f "$IMG" ]]; then
-  echo "ERROR: Образ не найден: $IMG" >&2
+  log_error "Образ не найден: $IMG"
   exit 1
 fi
 
 if [[ ! -f "$SSH_PUBLIC_KEY" ]]; then
-  echo "ERROR: SSH public key not found: $SSH_PUBLIC_KEY" >&2
+  log_error "SSH public key not found: $SSH_PUBLIC_KEY"
   exit 1
 fi
 

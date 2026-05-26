@@ -1,13 +1,9 @@
 #!/usr/bin/env bash
-set -euo pipefail
-
-if [[ $EUID -ne 0 ]]; then
-  echo "Ошибка: запустите скрипт от root" >&2
-  exit 1
-fi
+source "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh"
+ensure_root
 
 if ! command -v curl >/dev/null 2>&1; then
-  echo "ERROR: curl не найден." >&2
+  log_error "curl not found."
   exit 1
 fi
 
@@ -16,7 +12,7 @@ if ! command -v docker >/dev/null 2>&1; then
   systemctl enable docker
   systemctl start docker
 else
-  echo "Docker уже установлен. Пропускаю установку и запуск."
+  log_info "Docker already installed. Skipping installation and start."
 fi
 
 if [[ -n "${SUDO_USER:-}" ]]; then
