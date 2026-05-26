@@ -131,6 +131,17 @@ log_info "Подключение: ssh ubuntu@$STATIC_IP"
 ssh-keygen -R "$STATIC_IP" >/dev/null 2>&1 || true
 ssh-keyscan -H "$STATIC_IP" >> "$HOME/.ssh/known_hosts"
 
+
+
+# Очищаем multipath внутри гостя
+qm guest exec "$VMID" -- bash -lc "
+  set -e
+  systemctl stop multipathd || true
+  systemctl disable multipathd || true
+  apt-get purge -y multipath-tools || true
+  update-initramfs -u
+" || true
+
 # Инициализируем дополнительный диск /dev/sdb внутри гостя (GPT, ext4, монтируем в /mnt/data)
 log_info "Инициализация диска /dev/sdb"
 qm guest exec "$VMID" -- bash -lc "

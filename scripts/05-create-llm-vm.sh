@@ -57,6 +57,12 @@ GPU_ADDR=$(lspci -d 10de: | awk 'NR==1 {print $1}')
 if [[ -n "$GPU_ADDR" ]]; then
   log_info "Настройка GPU $GPU_ADDR"
   qm set "$VMID" --hostpci0 "$GPU_ADDR,pcie=1,x-vga=1"
+  # Blacklist nouveau driver внутри гостевой ОС и обновляем initramfs
+  qm guest exec "$VMID" -- bash -lc '
+    echo "blacklist nouveau" > /etc/modprobe.d/blacklist-nouveau.conf
+    echo "options nouveau modeset=0" >> /etc/modprobe.d/blacklist-nouveau.conf
+    update-initramfs -u
+  '
 else
   log_warn "NVIDIA GPU не найден – пропускаем проброс"
 fi
@@ -101,7 +107,17 @@ qm guest exec "$VMID" -- bash -lc "
   set -e
   apt-get update -y && apt-get install -y cloud-guest-utils gdisk || true
   sgdisk -e /dev/sda
+  partprobe /dev/sda
   growpart /dev/sda 1
   resize2fs /dev/sda1
+" || true
+
+# Очищаем multipath внутри гостя
+qm guest exec "$VMID" -- bash -lc "
+  set -e
+  systemctl stop multipathd || true
+  systemctl disable multipathd || true
+  apt-get purge -y multipath-tools || true
+  update-initramfs -u
 " || true
 
