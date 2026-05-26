@@ -2,6 +2,9 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh"
 ensure_root
 
+# Ensure bridge vmbr1 is up (no physical NIC)
+ip link set vmbr1 up || true
+
 # Идентификатор и имя создаваемой VM.
 VMID=120
 NAME="monitoring-vm"
@@ -9,10 +12,11 @@ NAME="monitoring-vm"
 STORAGE="SSD-VMs"
 TEMPLATE=9000
 NETWORK_MODE="${NETWORK_MODE:-manual}"
-STATIC_IP="${STATIC_IP:-}"
+STATIC_IP="${STATIC_IP:-10.10.10.60}"
 STATIC_PREFIX="${STATIC_PREFIX:-24}"
-STATIC_GATEWAY="${STATIC_GATEWAY:-}"
-STATIC_DNS="${STATIC_DNS:-}"
+STATIC_GATEWAY="${STATIC_GATEWAY:-10.10.10.1}"
+STATIC_DNS="${STATIC_DNS:-10.10.10.1}"
+
 
 build_ipconfig0() {
   if [[ "$NETWORK_MODE" == "dhcp" ]]; then

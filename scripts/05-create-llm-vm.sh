@@ -2,6 +2,9 @@
 source "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh"
 ensure_root
 
+# Ensure bridge vmbr1 is up (no physical NIC)
+ip link set vmbr1 up || true
+
 SCRIPT_DIR=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 VMID=${1:-110}
 NAME="llm-server"
@@ -12,10 +15,11 @@ CORES=4
 SYS_DISK_SIZE="44G"
 DATA_DISK_SIZE="120"
 NETWORK_MODE="${NETWORK_MODE:-manual}"
-STATIC_IP="${STATIC_IP:-}"
+STATIC_IP="${STATIC_IP:-10.10.10.50}"
 STATIC_PREFIX="${STATIC_PREFIX:-24}"
-STATIC_GATEWAY="${STATIC_GATEWAY:-}"
-STATIC_DNS="${STATIC_DNS:-}"
+STATIC_GATEWAY="${STATIC_GATEWAY:-10.10.10.1}"
+STATIC_DNS="${STATIC_DNS:-10.10.10.1}"
+
 
 normalize_data_disk_size() {
   local value="$1"
