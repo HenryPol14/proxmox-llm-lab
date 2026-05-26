@@ -11,6 +11,7 @@ NAME="monitoring-vm"
 # Хранилище и шаблон, от которого будет клонироваться VM.
 STORAGE="SSD-VMs"
 TEMPLATE=9000
+DATA_DISK_SIZE="120"   # GB либо GiB
 NETWORK_MODE="${NETWORK_MODE:-manual}"
 STATIC_IP="${STATIC_IP:-10.10.10.60}"
 STATIC_PREFIX="${STATIC_PREFIX:-24}"
@@ -36,11 +37,11 @@ build_ipconfig0() {
 
   local normalized_ip="$STATIC_IP"
   if [[ "$normalized_ip" != */* ]]; then
-    normalized_ip="${normalized_ip}/${STATIC_PREFIX}"
+    normalized_ip="${STATIC_IP}/${STATIC_PREFIX}"
   fi
 
-  # Always include DNS (default 10.10.10.1)
-  echo "ip=${normalized_ip},gw=${STATIC_GATEWAY},dns=${STATIC_DNS}"
+  # Output ip and gw only; dns will be set via --nameserver
+  echo "ip=${normalized_ip},gw=${STATIC_GATEWAY}"
 }
 
 # Скрипт должен запускаться от root, потому что управляет Proxmox и qm.
@@ -86,6 +87,7 @@ qm set "$VMID" \
   --cores 4 \
   --cpu host \
   --scsi0 "${STORAGE}:32" \
+  --scsi1 "${STORAGE}:${DATA_DISK_SIZE}G,discard=on,ssd=1,iothread=1" \
   --net0 virtio,bridge=vmbr1
 
 # Включаем cloud-init и используем настройки шаблона.
