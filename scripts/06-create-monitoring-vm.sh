@@ -91,7 +91,8 @@ qm set "$VMID" \
 # Включаем cloud-init и используем настройки шаблона.
 qm set "$VMID" \
   --ciuser ubuntu \
-  --ipconfig0 "$IPCONFIG0"
+  --ipconfig0 "$IPCONFIG0" \
+  --nameserver "$STATIC_DNS"
 
 # Запускаем VM после завершения конфигурации, если она еще не работает.
 if qm status "$VMID" 2>/dev/null | grep -q 'running'; then

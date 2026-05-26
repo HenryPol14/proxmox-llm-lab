@@ -59,8 +59,8 @@ build_ipconfig0() {
     normalized_ip="${normalized_ip}/${STATIC_PREFIX}"
   fi
 
-  # Always include DNS (default 10.10.10.1)
-  echo "ip=${normalized_ip},gw=${STATIC_GATEWAY},dns=${STATIC_DNS}"
+  # Output only ip and gateway; DNS will be set via --nameserver
+  echo "ip=${normalized_ip},gw=${STATIC_GATEWAY}"
 }
 
 run_guest_script() {
