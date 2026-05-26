@@ -1,6 +1,26 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Initialize debugging if DEBUG is set
+debug_init() {
+  if [[ -n "${DEBUG:-}" ]]; then
+    # Enable command tracing
+    set -x
+    # Redirect all output to a log file for later analysis
+    local log_file="/var/log/proxmox-$(basename "${BASH_SOURCE[0]}").log"
+    exec > >(tee -a "$log_file") 2>&1
+    log_info "Debug mode enabled – logging to $log_file"
+  fi
+}
+
+# Global error trap to capture failures
+error_trap() {
+  local exit_code=$?
+  local line_no=${BASH_LINENO[0]:-?}
+  log_error "Script aborted with exit code $exit_code at line $line_no"
+}
+trap error_trap ERR
+
 # Logging helpers with timestamps
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*"; }
 log_info()  { log "INFO: $*"; }
