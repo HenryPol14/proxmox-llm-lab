@@ -20,7 +20,7 @@ NETWORK_MODE="manual"
 STATIC_IP="${STATIC_IP:-10.10.10.50}"
 STATIC_PREFIX="${STATIC_PREFIX:-24}"
 STATIC_GATEWAY="${STATIC_GATEWAY:-10.10.10.1}"
-STATIC_DNS="${STATIC_DNS:-10.10.10.1}"
+STATIC_DNS="${STATIC_DNS:-1.1.1.1}"
 
 # Проверяем наличие шаблона
 if ! qm config "$TEMPLATE" >/dev/null 2>&1; then
@@ -95,4 +95,13 @@ log_info "Подключение: ssh ubuntu@$STATIC_IP"
 # Удаляем старый ключ хоста из known_hosts (если существует) и добавляем новый
 ssh-keygen -R "$STATIC_IP" >/dev/null 2>&1 || true
 ssh-keyscan -H "$STATIC_IP" >> "$HOME/.ssh/known_hosts"
+
+# Исправляем GPT‑разметку внутри гостя (перемещаем backup‑таблицу и расширяем корневой раздел)
+qm guest exec "$VMID" -- bash -lc "
+  set -e
+  apt-get update -y && apt-get install -y cloud-guest-utils gdisk || true
+  sgdisk -e /dev/sda
+  growpart /dev/sda 1
+  resize2fs /dev/sda1
+" || true
 

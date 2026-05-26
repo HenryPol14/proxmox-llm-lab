@@ -98,9 +98,39 @@ qm set "$VMID" \
 
 # Запускаем VM после завершения конфигурации, если она еще не работает.
 if qm status "$VMID" 2>/dev/null | grep -q 'running'; then
-  echo "VM $VMID уже запущена."
+  log_info "VM $VMID уже запущена"
 else
+  log_info "Запуск VM $VMID"
   qm start "$VMID"
 fi
+
+# Ожидаем QEMU Guest Agent
+log_info "Ожидание QEMU Guest Agent"
+for i in {1..30}; do
+  if qm guest exec "$VMID" -- uptime >/dev/null 2>&1; then
+    log_info "Guest Agent готов"
+    break
+  fi
+  sleep 2
+done
+
+log_info "VM $VMID готова. IP: $STATIC_IP"
+log_info "Подключение: ssh ubuntu@$STATIC_IP"
+# Обновляем known_hosts
+ssh-keygen -R "$STATIC_IP" >/dev/null 2>&1 || true
+ssh-keyscan -H "$STATIC_IP" >> "$HOME/.ssh/known_hosts"
+
+# Инициализируем дополнительный диск /dev/sdb внутри гостя (GPT, ext4, монтируем в /mnt/data)
+qm guest exec "$VMID" -- bash -lc "
+  set -e
+  apt-get update -y && apt-get install -y cloud-guest-utils gdisk || true
+  sgdisk -o /dev/sdb
+  sgdisk -n 1:0:0 -t 1:8300 /dev/sdb
+  partprobe /dev/sdb
+  mkfs.ext4 -F /dev/sdb1
+  mkdir -p /mnt/data
+  echo '/dev/sdb1 /mnt/data ext4 defaults 0 0' >> /etc/fstab
+  mount /mnt/data
+" || true
 
 echo "MONITORING VM CREATED"
