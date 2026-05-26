@@ -114,6 +114,17 @@ for i in {1..30}; do
   sleep 2
 done
 
+# Исправляем GPT‑таблицу на /dev/sda и расширяем корневой раздел
+log_info "Корректировка GPT и рост root‑раздела"
+qm guest exec "$VMID" -- bash -lc "
+  set -e
+  apt-get update -y && apt-get install -y cloud-guest-utils gdisk || true
+  sgdisk -e /dev/sda
+  partprobe /dev/sda
+  growpart /dev/sda 1
+  resize2fs /dev/sda1
+" || true
+
 log_info "VM $VMID готова. IP: $STATIC_IP"
 log_info "Подключение: ssh ubuntu@$STATIC_IP"
 # Обновляем known_hosts
@@ -121,6 +132,7 @@ ssh-keygen -R "$STATIC_IP" >/dev/null 2>&1 || true
 ssh-keyscan -H "$STATIC_IP" >> "$HOME/.ssh/known_hosts"
 
 # Инициализируем дополнительный диск /dev/sdb внутри гостя (GPT, ext4, монтируем в /mnt/data)
+log_info "Инициализация диска /dev/sdb"
 qm guest exec "$VMID" -- bash -lc "
   set -e
   apt-get update -y && apt-get install -y cloud-guest-utils gdisk || true
