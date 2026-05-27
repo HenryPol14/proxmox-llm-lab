@@ -1,4 +1,7 @@
 #!/usr/bin/env bash
+# 03-download-cloud-image.sh – загрузка cloud‑image Ubuntu для шаблона
+# Скрипт идемпотентен: если образ уже существует, повторная загрузка пропускается
+# Использует utils.sh для логирования и отладки
 source "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh"
 ensure_root
 

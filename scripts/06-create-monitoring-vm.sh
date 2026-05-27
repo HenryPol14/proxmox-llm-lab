@@ -1,4 +1,8 @@
 #!/usr/bin/env bash
+# 06-create-monitoring-vm.sh – создание и настройка VM для мониторинга (Grafana, Prometheus)
+# Скрипт идемпотентен: если VM уже существует, обновляет конфигурацию без пересоздания
+# Использует utils.sh для логирования, отладки и других общих функций
+
 source "$(dirname "${BASH_SOURCE[0]}")/lib/utils.sh"
 ensure_root
 
