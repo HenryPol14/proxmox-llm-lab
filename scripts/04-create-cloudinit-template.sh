@@ -18,16 +18,59 @@ if [[ ! -f "$SSH_PUBLIC_KEY" ]]; then
   exit 1
 fi
 
-echo "--- Модификация образа (Console & Agent) ---"
-# 1. Включаем вывод в Serial консоль (ttyS0)
-# 2. Устанавливаем Guest Agent
-# 3. Сбрасываем Machine-ID для уникальных IP по DHCP
-virt-customize -a "$IMG" \
-  --install qemu-guest-agent,curl \
-  --run-command "sed -i 's/GRUB_CMDLINE_LINUX_DEFAULT=\"\(.*\)\"/GRUB_CMDLINE_LINUX_DEFAULT=\"\1 console=tty0 console=ttyS0,115200n8\"/' /etc/default/grub" \
-  --run-command "update-grub" \
-  --run-command "truncate -s 0 /etc/machine-id" \
-  --truncate /etc/machine-id
+# --- Установка базовых пакетов и подготовка шаблона ---
+# Вместо virt-customize будем запускать временную VM, устанавливать необходимые пакеты,
+# включать сервисы, настраивать sysctl и очищать cloud‑init.
+# Это обеспечивает idempotent‑построение шаблона с нужными инструментами.
+
+# После создания и импорта диска запустим VM, установим пакеты и настроим окружение.
+log_info "Запуск временной VM $VMID для подготовки шаблона"
+qm start "$VMID"
+
+# Ожидание QEMU Guest Agent
+log_info "Ожидание QEMU Guest Agent в шаблоне"
+for i in {1..30}; do
+  if qm guest exec "$VMID" -- uptime >/dev/null 2>&1; then
+    log_info "Guest Agent готов"
+    break
+  fi
+  sleep 2
+done
+
+# Установка базовых пакетов и включение сервисов
+qm guest exec "$VMID" -- bash -lc '
+  set -e
+  apt-get update -y
+  apt-get install -y qemu-guest-agent cloud-init docker.io htop curl git nvtop pciutils ubuntu-drivers-common
+  systemctl enable qemu-guest-agent
+  systemctl enable docker
+'
+
+# Настройка sysctl
+qm guest exec "$VMID" -- bash -lc '
+  cat > /etc/sysctl.d/99-llm.conf <<EOF
+vm.swappiness=5
+vm.max_map_count=1048576
+fs.inotify.max_user_watches=1048576
+EOF
+  sysctl --system
+'
+
+# Очистка cloud‑init и machine‑id
+qm guest exec "$VMID" -- bash -lc '
+  cloud-init clean
+  truncate -s 0 /etc/machine-id
+  rm -f /var/lib/dbus/machine-id
+  sync
+'
+
+# Остановка VM и преобразование в шаблон
+log_info "Остановка VM $VMID перед конвертацией в шаблон"
+qm shutdown "$VMID" || qm stop "$VMID"
+# Ждём выключения
+while qm status "$VMID" | grep -q running; do sleep 1; done
+
+
 
 echo "--- Подготовка шаблона $VMID ---"
 if qm config "$VMID" >/dev/null 2>&1; then
